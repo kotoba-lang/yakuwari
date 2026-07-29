@@ -83,6 +83,21 @@
       (throw (ex-info "Invalid yakuwari spec" r)))
     (:spec r)))
 
+(defn runner-pool
+  "Expand weighted runners while spreading the first replicas across
+  providers. A desired capacity of two should not silently become two copies
+  of one provider merely because it has the greatest weight."
+  [spec]
+  (let [runners (:yakuwari/runners (validate! spec))
+        max-weight (apply max (map #(or (:weight %) 1) runners))]
+    (->> (range max-weight)
+         (mapcat (fn [round]
+                   (keep (fn [{:keys [runner weight]}]
+                           (when (< round (or weight 1))
+                             (name runner)))
+                         runners)))
+         vec)))
+
 (defn decide
   "What may this yakuwari do with `capability`? Delegates to yakuwari.policy,
   which fails closed on anything unlisted."

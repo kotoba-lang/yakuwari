@@ -25,7 +25,8 @@
 ;; ───────────────────────────── spec ─────────────────────────────
 
 (deftest a-valid-spec-passes
-  (is (:ok? (spec/validate base))))
+  (is (:ok? (spec/validate base)))
+  (is (= ["claude"] (spec/runner-pool base))))
 
 (deftest every-problem-is-reported-at-once
   (testing "one error per round trip turns a ten-field spec into a ten-step form"
@@ -132,3 +133,26 @@
       (is (empty? (:cancel (rec/plan s runs t0)))))
     (testing "once it has sat idle past the window, it is eligible"
       (is (= ["b"] (:cancel (rec/plan s runs (+ t0 61000))))))))
+
+(deftest host-adapters-can-preserve-their-durable-run-schema
+  (let [actor-spec (-> base
+                       (assoc :yakuwari/id :revenue/test
+                              :yakuwari/run-key :agent.run/actor
+                              :yakuwari/stale-policy :execution-deadline
+                              :yakuwari/pressure-mode :tamaki
+                              :yakuwari/control-pressure 0.8)
+                       (assoc :yakuwari/scale
+                              {:min 1 :desired 2 :max 5
+                               :scale-up-on {:business-pressure 0.65}}))
+        run {:agent.run/id "legacy"
+             :agent.run/actor :revenue/test
+             :agent.run/status :running
+             :agent.run/updated-at t0
+             :agent.run/budget {:deadline-ms 1000}}
+        live (rec/plan actor-spec [run] (+ t0 1000))
+        expired (rec/plan actor-spec [run]
+                          (+ t0 1000 rec/default-lease-grace-ms))]
+    (is (= 4 (:desired live)))
+    (is (= 1 (:running live)))
+    (is (= ["legacy"] (:reap expired)))
+    (is (= 4 (:spawn expired)))))
