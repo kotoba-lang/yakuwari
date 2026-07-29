@@ -97,6 +97,9 @@ clojure -M:test   # JVM host — must agree exactly
 
 ## Status
 
-Extracted 2026-07-29 from `kotoba.tamaki.actor`. **tamaki has not been
-switched over** — for now this is a second copy rather than a shared one.
-Pointing tamaki at it is the follow-up that makes the extraction real.
+Extracted 2026-07-29 from `kotoba.tamaki.actor`. Tamaki adopts this repository
+through a compatibility adapter: persisted `:actor/*` and
+`:agent.run/actor` attributes stay stable while validation, runner-pool
+expansion, HIL vocabulary, and desired-state reconciliation are defined here.
+Host-specific topology prompts, visibility checks, and AgentRun construction
+remain Tamaki orchestration concerns.
