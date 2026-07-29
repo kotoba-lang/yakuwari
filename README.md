@@ -93,7 +93,7 @@ npm test          # nbb / JS host
 clojure -M:test   # JVM host — must agree exactly
 ```
 
-15 tests, 37 assertions, both hosts.
+16 tests, 42 assertions, both hosts.
 
 ## Status
 
