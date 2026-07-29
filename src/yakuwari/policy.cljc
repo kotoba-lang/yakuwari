@@ -7,6 +7,12 @@
   capability is a property of the role holding it. An AO's own policy is
   simply the policy of the role it acts as.
 
+  Complements `kotoba-lang/hil` rather than duplicating it. This namespace
+  answers “does this capability need a human at all, and how much of one”;
+  `hil.core` is the transaction that asks and returns :approved / :rejected /
+  :dismissed. A `:approval-required` decision here is what routes a call into
+  `hil/request!`; :autonomous never reaches it.
+
   The vocabulary is `kotoba.tamaki.actor/hil-decisions`, adopted rather than
   re-invented. A fourth spelling of the same four ideas was drafted while
   scaffolding an AO (`:self-executing` / `:propose` / `:forbidden`); it is
