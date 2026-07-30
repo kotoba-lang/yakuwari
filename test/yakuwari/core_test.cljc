@@ -156,3 +156,82 @@
     (is (= 1 (:running live)))
     (is (= ["legacy"] (:reap expired)))
     (is (= 4 (:spawn expired)))))
+;; ---------------------------------------------------------------------------
+;; The authored `:yakuwari/capabilities` form must reach policy.
+;;
+;; person-awai-ryo shipped a reviewed policy that had no effect: it declared
+;; :mail.inbound :autonomous and `decide` answered :blocked, because an absent
+;; :yakuwari/policy is a valid empty map and nothing joined the two spellings.
+;; ---------------------------------------------------------------------------
+
+(def authored
+  "The shape person-awai-ryo actually uses: a vector carrying the :note that
+  makes each grant reviewable, and NO :yakuwari/policy key."
+  {:yakuwari/id :panel-steward
+   :yakuwari/project "network-awai/person-awai-ryo"
+   :yakuwari/objective "run panel studies and return findings to the product repo"
+   :yakuwari/scale {:min 0 :desired 1 :max 2}
+   :yakuwari/runners [{:runner :claude :weight 1}]
+   :yakuwari/capabilities
+   [{:capability :mail.inbound :decision :autonomous :note "receive and file mail"}
+    {:capability :mail.send :decision :approval-required :note "external correspondence"}
+    {:capability :account.create :decision :blocked :note "a human step"}]})
+
+(deftest the-authored-capability-form-decides-as-written
+  (testing "a grant stated with a note is honoured, not silently blocked"
+    (is (= :autonomous (spec/decide authored :mail.inbound)))
+    (is (= :approval-required (spec/decide authored :mail.send)))
+    (is (= :blocked (spec/decide authored :account.create))))
+  (testing "an unlisted capability still fails closed"
+    (is (= :blocked (spec/decide authored :prolific.study.publish))))
+  (testing "and the spec is still valid"
+    (is (:ok? (spec/validate authored)))))
+
+(deftest both-spellings-coexist-with-the-stricter-winning
+  (let [both (assoc authored :yakuwari/policy {:mail.inbound :approval-required
+                                               :prolific.read :autonomous})]
+    (testing "neither form shadows the other"
+      (is (= :autonomous (spec/decide both :prolific.read)))
+      (is (= :approval-required (spec/decide both :mail.send))))
+    (testing "on overlap the strict decision wins regardless of merge order"
+      (is (= :approval-required (spec/decide both :mail.inbound))))))
+
+(deftest a-capability-listed-twice-takes-its-strictest-decision
+  (let [dup (assoc authored :yakuwari/capabilities
+                   [{:capability :mail.send :decision :autonomous}
+                    {:capability :mail.send :decision :blocked}])]
+    (is (= :blocked (spec/decide dup :mail.send)))))
+
+(deftest a-typod-decision-is-reported-not-quietly-blocked
+  (let [typo (assoc authored :yakuwari/capabilities
+                    [{:capability :mail.inbound :decision :autonomus}])
+        r (spec/validate typo)]
+    (testing "normalizing to :blocked is safe but must not read as a healthy policy"
+      (is (not (:ok? r)))
+      (is (some #(= :unknown-decision (:problem %)) (:problems r))))
+    (testing "and it still fails closed"
+      (is (= :blocked (spec/decide typo :mail.inbound))))))
+
+(deftest a-capability-with-no-name-is-refused
+  (let [blank (assoc authored :yakuwari/capabilities [{:capability nil :decision :autonomous}])]
+    (is (some #(= :blank-capability (:problem %)) (:problems (spec/validate blank))))))
+
+(deftest a-non-sequential-capabilities-value-is-refused
+  (let [bad (assoc authored :yakuwari/capabilities {:mail.inbound :autonomous})
+        r (spec/validate bad)]
+    (testing "a map here is the flat-policy shape in the wrong key — say so"
+      (is (not (:ok? r)))
+      (is (some #(= :capabilities-not-sequential (:problem %)) (:problems r))))))
+
+(deftest the-normalized-spec-carries-the-effective-policy
+  (testing "a caller that validates then reads the policy sees what is in force"
+    (is (= :autonomous
+           (policy/decide (:yakuwari/policy (spec/validate! authored)) :mail.inbound)))))
+
+(deftest legacy-spellings-work-in-the-authored-form-too
+  (let [legacy (assoc authored :yakuwari/capabilities
+                      [{:capability :mail.inbound :decision :self-executing}
+                       {:capability :mail.send :decision :propose}])]
+    (is (:ok? (spec/validate legacy)))
+    (is (= :autonomous (spec/decide legacy :mail.inbound)))
+    (is (= :approval-required (spec/decide legacy :mail.send)))))
