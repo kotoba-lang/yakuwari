@@ -68,6 +68,27 @@ can fill; better to say so than to discover it at reconcile.
 **An unlisted capability is `:blocked`.** Permission must not arrive by
 omission. Unparseable decisions fail closed the same way.
 
+**Two spellings of a policy, both honoured, strictest winning.** A flat
+`:yakuwari/policy` `{cap decision}` map is what the policy functions want, but
+a reviewer needs the *reason* a grant exists — so a role file may instead
+author `:yakuwari/capabilities`, a vector of `{:capability :decision :note}`
+that keeps the justification next to the grant. `spec/effective-policy` joins
+them; on overlap `policy/strictest-of` decides, so a careless second entry
+cannot widen a reviewed grant.
+
+Nothing joined them until 2026-07-30, and the consequence was a reviewed
+policy with no effect: `person-awai-ryo` declared `:mail.inbound :autonomous`
+and `decide` answered `:blocked` for every capability it had, because an
+absent `:yakuwari/policy` is a valid empty map and validation had no reason to
+complain. It failed closed, so nothing was over-permitted — but the file a
+human approved was not the file the model read. That repo's README already
+printed the correct table; only the code disagreed.
+
+**Validation reads the raw policy, `decide` reads the normalized one.**
+Checking the normalized policy would defeat the check — `normalize-decision`
+maps an unknown value to `:blocked`, so a role whose author typed
+`:autonomus` would report a clean bill of health.
+
 **Running work is never cancelled to shed capacity.** Only `:queued` and
 `:held` runs are eligible — cancelling a running execution discards work
 already paid for.
@@ -93,7 +114,7 @@ npm test          # nbb / JS host
 clojure -M:test   # JVM host — must agree exactly
 ```
 
-16 tests, 42 assertions, both hosts.
+24 tests, 61 assertions, both hosts.
 
 ## Status
 

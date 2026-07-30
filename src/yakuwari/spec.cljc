@@ -32,6 +32,59 @@
     (and (string? value) (not (str/blank? value))) (keyword value)
     :else (throw (ex-info "yakuwari requires an id" {:value value}))))
 
+(defn capabilities->policy
+  "The authored `:yakuwari/capabilities` form -> the `{capability decision}`
+  map `yakuwari.policy` consumes.
+
+  Two spellings of the same thing exist because they are good at different
+  jobs. A flat `{cap decision}` map is what the policy functions want. But a
+  reviewer needs to know *why* a capability was granted, and the reason is
+  the part worth reviewing — so a role file authors a vector of
+  `{:capability :decision :note}`, keeping the justification next to the
+  grant instead of in a comment that drifts away from it.
+
+  Nothing joined the two, which is how a reviewed policy came to have no
+  effect: `person-awai-ryo` declared `:mail.inbound :autonomous` and
+  `decide` answered `:blocked`, because an absent `:yakuwari/policy` is a
+  valid empty map and validation had no reason to complain. It failed
+  closed, so nothing was over-permitted — but the file a human approved was
+  not the file the model read.
+
+  A capability listed twice takes the STRICTEST of its decisions
+  (`policy/strictest-of`), the same rule that already applies to a
+  capability reachable by more than one path. Duplicates are a drafting
+  mistake, and resolving one toward autonomy would let a careless second
+  entry widen a reviewed grant."
+  [capabilities]
+  (reduce (fn [acc entry]
+            (let [cap (:capability entry)
+                  d (:decision entry)]
+              (if (nil? cap)
+                acc
+                (assoc acc cap (if-let [prior (get acc cap)]
+                                 (policy/strictest-of [prior d])
+                                 (policy/normalize-decision d))))))
+          {}
+          (when (sequential? capabilities) capabilities)))
+
+(defn effective-policy
+  "The policy actually in force: `:yakuwari/policy` merged over the policy
+  derived from `:yakuwari/capabilities`, strictest winning on overlap.
+
+  Both forms are accepted so neither existing spelling breaks, and neither
+  silently shadows the other — a role carrying both gets the stricter of the
+  two per capability rather than whichever the merge order happened to
+  favour."
+  [spec]
+  (let [derived (capabilities->policy (:yakuwari/capabilities spec))
+        declared (or (:yakuwari/policy spec) {})]
+    (reduce (fn [acc [cap d]]
+              (assoc acc cap (if-let [prior (get acc cap)]
+                               (policy/strictest-of [prior d])
+                               (policy/normalize-decision d))))
+            derived
+            (when (map? declared) declared))))
+
 (defn validate
   "Report every problem at once — a UI showing one error per round trip
   makes a ten-field spec a ten-step form.
@@ -44,7 +97,14 @@
         scale (merge default-scale (:yakuwari/scale spec))
         {:keys [min desired max]} scale
         runners (vec (:yakuwari/runners spec))
-        pol (:yakuwari/policy spec)
+        caps (let [c (:yakuwari/capabilities spec)] (if (sequential? c) c []))
+        ;; RAW for validation, EFFECTIVE for the returned spec. Validating the
+        ;; normalized policy would defeat the point: normalize-decision maps an
+        ;; unknown value to :blocked, so a typo'd decision would read as a
+        ;; healthy policy — the same trap the capability-entry check below
+        ;; exists to avoid.
+        declared-pol (:yakuwari/policy spec)
+        pol (effective-policy spec)
         problems
         (cond-> []
           (nil? id) (conj {:problem :missing-id})
@@ -69,12 +129,37 @@
                                 (not (pos-int? (or weight 1))))]
                   {:problem :invalid-runner :runner runner :weight weight}))
 
+          ;; The RAW capability entries, not the derived policy: a typo'd
+          ;; decision is normalized to :blocked by capabilities->policy, so
+          ;; checking only the derived map would report a healthy policy for a
+          ;; file whose author wrote :autonomus and got :blocked.
           :always
-          (into (:problems (policy/validate-policy (or pol {})))))]
+          (into (for [entry caps
+                      :let [cap (:capability entry)
+                            d (:decision entry)]
+                      :when (not (and cap
+                                      (not (str/blank? (str (if (keyword? cap) (name cap) cap))))
+                                      (or (contains? policy/decision-set d)
+                                          (contains? policy/legacy-aliases d))))]
+                  (if (or (nil? cap)
+                          (str/blank? (str (if (keyword? cap) (name cap) cap))))
+                    {:problem :blank-capability :capability cap}
+                    {:problem :unknown-decision :capability cap :decision d})))
+
+          (not (or (nil? (:yakuwari/capabilities spec))
+                   (sequential? (:yakuwari/capabilities spec))))
+          (conj {:problem :capabilities-not-sequential
+                 :capabilities (:yakuwari/capabilities spec)})
+
+          :always
+          (into (:problems (policy/validate-policy (or declared-pol {})))))]
     {:ok? (empty? problems)
      :problems (vec problems)
+     ;; The normalized spec carries the EFFECTIVE policy, so a caller that
+     ;; validates and then reads :yakuwari/policy sees what is actually in
+     ;; force rather than an absent key.
      :spec (assoc spec :yakuwari/id id :yakuwari/scale scale
-                  :yakuwari/runners runners)}))
+                  :yakuwari/runners runners :yakuwari/policy pol)}))
 
 (defn validate!
   [spec]
@@ -100,6 +185,11 @@
 
 (defn decide
   "What may this yakuwari do with `capability`? Delegates to yakuwari.policy,
-  which fails closed on anything unlisted."
+  which fails closed on anything unlisted.
+
+  Reads the EFFECTIVE policy, so a role that states its grants as
+  `:yakuwari/capabilities` — the form that carries a reviewable `:note` next
+  to each grant — gets the answer its author wrote rather than `:blocked`
+  for everything."
   [spec capability]
-  (policy/decide (:yakuwari/policy spec) capability))
+  (policy/decide (effective-policy spec) capability))
