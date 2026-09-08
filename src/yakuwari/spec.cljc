@@ -21,7 +21,7 @@
   preference.
 
   Pure and portable — no clock, no storage, no dispatch."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [yakuwari.policy :as policy]))
 
 (def default-scale {:min 0 :desired 1 :max 1})

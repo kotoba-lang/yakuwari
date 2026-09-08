@@ -19,7 +19,7 @@
   kept here only as `legacy-aliases`, mapping onto the real names, because
   the failure mode of parallel vocabularies is that a policy reads as
   approved under one and blocked under the other."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (def decisions
   "Ordered from most to least autonomy. The order is meaningful:
