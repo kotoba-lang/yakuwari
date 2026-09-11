@@ -111,7 +111,7 @@ keeps two vocabularies alive forever.
 
 ```sh
 npm test          # nbb / JS host
-clojure -M:test   # JVM host — must agree exactly
+kbb -M:test   # JVM host — must agree exactly
 ```
 
 24 tests, 61 assertions, both hosts.
