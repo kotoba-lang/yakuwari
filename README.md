@@ -4,9 +4,9 @@ A durable organizational **role**: objective, scope, capacity bounds, runner
 pool, and human-in-the-loop policy.
 
 ```
-src/yakuwari/spec.cljc       the role definition and its validation
-src/yakuwari/policy.cljc     which capability needs which human
-src/yakuwari/reconcile.cljc  desired capacity → spawn / cancel / reap
+src/yakuwari/spec.cljk       the role definition and its validation
+src/yakuwari/policy.cljk     which capability needs which human
+src/yakuwari/reconcile.cljk  desired capacity → spawn / cancel / reap
 ```
 
 ## Where it sits
