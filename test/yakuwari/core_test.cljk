@@ -1,5 +1,5 @@
 (ns yakuwari.core-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [yakuwari.spec :as spec]
             [yakuwari.policy :as policy]
             [yakuwari.reconcile :as rec]))
